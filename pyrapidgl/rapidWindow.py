@@ -1,5 +1,6 @@
 import sys
 import math
+import traceback
 
 from PyQt4.QtCore import Qt, QPointF
 from PyQt4.QtGui import QApplication, QImage, QColor, QPixmap
@@ -23,38 +24,35 @@ class RapidGLWindow(QGLWidget):
     zNear = 1.0
     zFar = 100.0
 
-    # Min and max zoom levels. Default based on the perspective
-    ZoomMin = zNear + .25
-    ZoomMax = zFar - .25
-
-    # The step size for zoom levels
-    ZoomStep = 0.5
-
-    # The default zoom level 
-    DefaultZoomLevel = 25.0
-
     # Default camera position
     DefaultCameraX = 0
     DefaultCameraY = 10
+    DefaultCameraZ = 0
 
     # Default camera rotation
     DefaultCameraRotateX = 0.0
     DefaultCameraRotateY = 0.0
     DefaultCameraRotateZ = 0.0
 
-    def __init__(self):
+    # True to use default movement keys, False otherwise
+    UseMovementKeys = True
+
+    def __init__(self, *args, **kwargs):
         QGLWidget.__init__(self)
         self.__lastMousePos = None
         self.reset()
 
-        self._onSetup()
+        self._onSetup(*args, **kwargs)
 
     ##### Protected functions #####
 
     def _getKeyCallbacks(self):
         return {}
 
-    def _onSetup(self):
+    def _onSetup(self, *args, **kwargs):
+        pass
+
+    def _onQuit(self):
         pass
 
     def _onInitialize(self):
@@ -65,11 +63,11 @@ class RapidGLWindow(QGLWidget):
 
     ##### Getters and setters #####
 
-    def getZoomLevel(self):
-        return self.__zoomLevel
+    def getCameraPosition(self):
+        return self.__x, self.__y, self.__z
 
-    def setZoomLevel(self, zoomLevel):
-        self.__zoomLevel = zoomLevel
+    def getCameraRotation(self):
+        return self.__rotateX, self.__rotateY, self.__rotateZ
 
     ##### Utility functions #####
 
@@ -77,27 +75,12 @@ class RapidGLWindow(QGLWidget):
         # Keep track of the position of the camera
         self.__x = self.DefaultCameraX
         self.__y = self.DefaultCameraY
-
-        # Set up zoom properties
-        self.__zoomLevel = self.DefaultZoomLevel
+        self.__z = self.DefaultCameraZ
 
         # Set up the rotation values
         self.__rotateX = self.DefaultCameraRotateX
         self.__rotateY = self.DefaultCameraRotateY
         self.__rotateZ = self.DefaultCameraRotateZ
-
-    def zoom(self, direction):
-        '''Zoom the given direction (-1 = out, 1 = in).
-
-        * direction -- The direction to zoom
-
-        '''
-        if direction != 0:
-            self.__zoomLevel += direction * self.ZoomStep
-
-            self.__zoomLevel = self.__bound(self.ZoomMin, self.__zoomLevel,
-                                            self.ZoomMax)
-            self.updateGL()
 
     def drawSphere(self, radius, lats, lons):
         '''Draw a sphere.
@@ -213,7 +196,7 @@ class RapidGLWindow(QGLWidget):
         diff = (event.posF() - self.__lastMousePos) / 50.0
         self.__lastMousePos = event.posF()
 
-        self.__x -= diff.x()
+        self.__x += diff.x()
         self.__y += diff.y()
 
         self.updateGL()
@@ -228,7 +211,7 @@ class RapidGLWindow(QGLWidget):
         direction = event.delta() / abs(event.delta())
 
         # Zoom the opposite of the scroll direction
-        self.zoom(-direction)
+        self.__z -= direction
 
     ##### Key event functions #####
 
@@ -241,27 +224,48 @@ class RapidGLWindow(QGLWidget):
         key = event.key()
 
         if key == Qt.Key_Escape:
+            try:
+                self._onQuit()
+            except:
+                traceback.print_exc()
+
             sys.exit(0)
 
-        elif key in [Qt.Key_Plus, Qt.Key_Equal]:
-            # Zoom in
-            self.zoom(-1)
+        elif self.UseMovementKeys and key == Qt.Key_Left:
+            self.__x += 1
 
-        elif key == Qt.Key_Minus:
-            # Zoom out
-            self.zoom(1)
+        elif self.UseMovementKeys and key == Qt.Key_Right:
+            self.__x -= 1
 
-        elif key == Qt.Key_W:
+        elif self.UseMovementKeys and key == Qt.Key_Up:
+            self.__y += 1
+
+        elif self.UseMovementKeys and key == Qt.Key_Down:
+            self.__y -= 1
+
+        elif self.UseMovementKeys and key in [Qt.Key_Plus, Qt.Key_Equal]:
+            self.__z += 1
+
+        elif self.UseMovementKeys and key == Qt.Key_Minus:
+            self.__z -= 1
+
+        elif self.UseMovementKeys and key == Qt.Key_W:
             self.__rotateX += 1
 
-        elif key == Qt.Key_S:
+        elif self.UseMovementKeys and key == Qt.Key_S:
             self.__rotateX -= 1
 
-        elif key == Qt.Key_A:
+        elif self.UseMovementKeys and key == Qt.Key_A:
+            self.__rotateY += 1
+
+        elif self.UseMovementKeys and key == Qt.Key_D:
             self.__rotateY -= 1
 
-        elif key == Qt.Key_D:
-            self.__rotateY += 1
+        elif self.UseMovementKeys and key == Qt.Key_L:
+            self.__rotateZ -= 1
+
+        elif self.UseMovementKeys and key == Qt.Key_P:
+            self.__rotateZ += 1
 
         else:
             # Look for a user defined key callback
@@ -283,8 +287,8 @@ class RapidGLWindow(QGLWidget):
         GL.glLoadIdentity()
 
         # Set up the camera such that it is looking straight ahead
-        GLU.gluLookAt(self.__x, self.__y, self.__zoomLevel,
-                      self.__x, self.__y, 0,
+        GLU.gluLookAt(self.__x, self.__y, self.__z,
+                      self.__x, self.__y, self.__z + 1,
                       0, 1, 0)
 
         GL.glRotatef(self.__rotateX, 1, 0, 0)
